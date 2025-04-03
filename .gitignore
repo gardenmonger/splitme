@@ -1,0 +1,21 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+#*
+
+audio_input/*
+audio_output/*
+
+*.gfc
+
+DissectAudio.py
+sliceAudio.py
+
+bin/
+include/
+lib/
+lib64/
+peaks/
+__pycache__/
+
+*.pub
+gitHub
+
