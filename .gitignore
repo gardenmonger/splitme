@@ -4,7 +4,7 @@
 audio_input/*
 audio_output/*
 
-*.gfc
+*.cfg
 
 DissectAudio.py
 sliceAudio.py
@@ -19,4 +19,8 @@ __pycache__/
 *.pub
 gitHub
 gitKey
+
+lib64
+
+~
 
