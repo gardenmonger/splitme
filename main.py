@@ -3,6 +3,7 @@ from pitchDetect import AudioPitchDetector
 from audioSplitter import AudioTransientSplitter
 import GetFile as file
 import GetOutput as folder
+import nameThatPitch as rename
 
 def main():
     print("Main Function")
@@ -24,7 +25,9 @@ def main():
         delta=0.05,            # Lower threshold for more sensitive detection
         wait=15                # Shorter wait period between transients
     )
-    print(sound.detect_pitch())
+
+    rename.process_wav_files(output)
+
 
 
 
