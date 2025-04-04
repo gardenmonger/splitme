@@ -10,7 +10,7 @@
 
 #[] double check to see that `requirement.txt` is installed 
 
-#[] run `python main.py`
+#[] run ```bash python main.py```
 
 #[] select which audio you want to use ![screenshot](assets/chooseAudio.png)
 
