@@ -2,7 +2,8 @@
 <h3>splits an audio stream and lables each sample with corresponding musical notes</h3>
 <h4>the notes are not entirely accurate ... but still working on that part</h4>
 
-#[] clone repository 
+#[] clone repository
+
 ![screenshot](assets/cloneRepo.png)
 
 #[] enable python environment `python -m venv to/repo/`
