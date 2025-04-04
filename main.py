@@ -29,7 +29,5 @@ def main():
     rename.process_wav_files(output)
 
 
-
-
 if __name__ == '__main__':
     main()
