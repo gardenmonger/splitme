@@ -19,12 +19,12 @@ def main():
         audio,
         output,
         min_duration_sec=0.1,
-        offset_ms=20)
-    # Adjust detection parameters for different audio characteristics
+        offset_ms=20) # Adjust detection parameters for different audio characteristics
+
     splitter.adjust_parameters(
         delta=0.05,            # Lower threshold for more sensitive detection
         wait=15                # Shorter wait period between transients
-    )
+        )
 
     rename.process_wav_files(output)
 

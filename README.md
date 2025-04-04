@@ -2,9 +2,9 @@
 <h3>splits an audio stream and lables each sample with corresponding musical notes</h3>
 
 
-#[] clone repository
+#[] clone repository ![screenshot](assets/cloneRepo.png)
 
-#[] enable `python -m venv to/repo/`
+#[] enable python environment `python -m venv to/repo/`
 
 #[] from terminal cd into dir 
 
