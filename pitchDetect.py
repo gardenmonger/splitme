@@ -3,6 +3,7 @@
 import librosa
 import os
 import numpy as np
+import math
 
 class AudioPitchDetector:
     def __init__(self, audio_path):
@@ -54,25 +55,62 @@ class AudioPitchDetector:
 
     def hz_to_note(self, frequency):
         """
-        Convert frequency in Hz to the closest musical note (A, B, C, D, E, F, G).
-        """
-        # Define note frequencies (for standard tuning, A4 = 440 Hz)
-        note_frequencies = {
-            'C': 261.63, 'C#': 277.18, 'D': 293.66, 'D#': 311.13, 'E': 329.63,
-            'F': 349.23, 'F#': 369.99, 'G': 392.00, 'G#': 415.30, 'A': 440.00,
-            'A#': 466.16, 'B': 493.88
-        }
-
-        # Calculate the closest note
-        diff = np.inf
-        closest_note = None
-        for note, note_freq in note_frequencies.items():
-            note_diff = abs(note_freq - frequency)
-            if note_diff < diff:
-                diff = note_diff
-                closest_note = note
+        Convert a frequency in Hz to the closest musical note.
         
-        return closest_note
+        Args:
+            frequency (float): The frequency in Hz to convert
+            
+        Returns:
+            tuple: (note_name, octave, cents_deviation)
+                - note_name: The name of the note (C, C#, D, etc.)
+                - octave: The octave number
+                - cents_deviation: How many cents sharp/flat the frequency is from the exact note
+        """
+        # A4 = 440 Hz is our reference
+        # A4 = 440.0
+        A4 = 442.0
+        
+        # Notes in an octave
+        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        
+        # Check for extremely low frequencies
+        if frequency <= 0:
+            return None, None, None
+        
+        # Calculate the number of half steps away from A4
+        # 12 * log2(f/440) gives the number of half steps
+        half_steps = 12 * math.log2(frequency / A4)
+        
+        # Round to the closest whole number to get the closest note
+        closest_half_step = round(half_steps)
+        
+        # Calculate how many cents we are off from the exact note
+        # 100 cents in a half step, positive means sharp, negative means flat
+        cents_deviation = 100 * (half_steps - closest_half_step)
+        
+        # A4 is note 'A' at octave 4, which is the 9th position (index 9) from C0
+        # So A4 is at position 9 + 4*12 = 57 half steps from C0
+        # C0 is the reference point (considered to be the lowest note)
+        
+        # Calculate the absolute position from C0
+        absolute_position = 57 + closest_half_step  # 57 is the position of A4
+        
+        # Determine the octave
+        octave = (absolute_position // 12) - 1  # Integer division
+        
+        # Determine the note name (index in the notes list)
+        note_index = absolute_position % 12
+        note_index = (note_index + 3) % 12  # Adjust because our array starts with C but we calculated from A
+        
+        # Get the note name
+        note_name = notes[note_index]
+        
+        print(f"octave: {octave}{cents_deviation}")
+
+        fnote = f"{note_name}_{octave}"
+        print(fnote)
+
+        return fnote
 
     def rename_file_with_note(self):
         """
