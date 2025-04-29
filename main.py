@@ -15,7 +15,7 @@ def main():
     # Visualize the transients
     splitter.visualize_transients(audio)
 
-    output_files = splitter.split_audio(
+    output_files = splitter.split_in_original_format(
         audio,
         output,
         min_duration_sec=0.1,
@@ -25,6 +25,8 @@ def main():
         delta=0.05,            # Lower threshold for more sensitive detection
         wait=15                # Shorter wait period between transients
         )
+
+
 
     rename.process_wav_files(output)
 
