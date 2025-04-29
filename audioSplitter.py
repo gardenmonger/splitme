@@ -2,7 +2,7 @@ import numpy as np
 import librosa
 import soundfile as sf
 import os
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 class AudioTransientSplitter:
     """
@@ -36,6 +36,7 @@ class AudioTransientSplitter:
         self.wait = wait
         self.delta = delta
         self.sr = sr
+        self.audio_info = None
         
     def load_audio(self, file_path: str) -> Tuple[np.ndarray, int]:
         """
@@ -47,10 +48,36 @@ class AudioTransientSplitter:
         Returns:
             Tuple of audio time series (numpy.ndarray) and sample rate
         """
+        # Get audio info first to access original properties
+        self.audio_info = sf.info(file_path)
+        
+        # Load with librosa for analysis (possibly resampling)
         y, sr = librosa.load(file_path, sr=self.sr, mono=True)
         if self.sr is None:
             self.sr = sr
         return y, sr
+        
+    def get_audio_info(self, file_path: str) -> Dict[str, Any]:
+        """
+        Get detailed audio file information including format, subtype, etc.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Dictionary with audio information
+        """
+        info = sf.info(file_path)
+        return {
+            'samplerate': info.samplerate,
+            'channels': info.channels,
+            'format': info.format,
+            'subtype': info.subtype,
+            'endian': info.endian,
+            'duration': info.duration,
+            'frames': info.frames,
+            'bitrate': getattr(info, 'bitrate', None)  # Not all formats have bitrate
+        }
     
     def detect_transients(self, y: np.ndarray) -> np.ndarray:
         """
@@ -83,7 +110,8 @@ class AudioTransientSplitter:
                     file_path: str, 
                     output_dir: str, 
                     min_duration_sec: float = 0.1,
-                    offset_ms: int = 0) -> List[str]:
+                    offset_ms: int = 0,
+                    output_format: Optional[str] = None) -> List[str]:
         """
         Split audio file at detected transients.
         
@@ -92,6 +120,8 @@ class AudioTransientSplitter:
             output_dir: Directory to save the split files
             min_duration_sec: Minimum duration in seconds for a segment to be saved
             offset_ms: Offset in milliseconds to start each segment before the detected transient
+            output_format: Optional format to save files as (e.g., 'wav', 'flac').
+                           If None, uses the same format as the input file.
             
         Returns:
             List of paths to the created audio segments
@@ -115,6 +145,19 @@ class AudioTransientSplitter:
         # Apply offset in samples
         offset_samples = int((offset_ms / 1000) * sr)
         
+        # Determine output file extension
+        if output_format:
+            file_ext = f".{output_format.lower()}"
+        else:
+            # Use the same format as the input file
+            file_ext = os.path.splitext(file_path)[1]
+            if not file_ext:
+                file_ext = ".wav"  # Default to wav if no extension
+        
+        # Get original audio format info for consistent output
+        if self.audio_info is None:
+            self.get_audio_info(file_path)
+            
         # Split and save audio segments
         output_files = []
         filename = os.path.splitext(os.path.basename(file_path))[0]
@@ -132,10 +175,17 @@ class AudioTransientSplitter:
             segment = y[start:end]
             
             # Create output file path
-            output_file = os.path.join(output_dir, f"{filename}_segment_{i:03d}.wav")
+            output_file = os.path.join(output_dir, f"{filename}_segment_{i:03d}{file_ext}")
             
-            # Save segment
-            sf.write(output_file, segment, sr)
+            # Save segment with original format properties
+            sf.write(
+                output_file, 
+                segment, 
+                sr,
+                subtype=self.audio_info.subtype,
+                format=self.audio_info.format,
+                endian=self.audio_info.endian
+            )
             output_files.append(output_file)
             
         return output_files
@@ -154,6 +204,30 @@ class AudioTransientSplitter:
                 setattr(self, param, value)
             else:
                 raise ValueError(f"Invalid parameter: {param}")
+                
+    def load_audio_with_original_format(self, file_path: str) -> Tuple[np.ndarray, int]:
+        """
+        Load audio file using soundfile to preserve original format.
+        
+        Args:
+            file_path: Path to the audio file
+            
+        Returns:
+            Tuple of audio time series (numpy.ndarray) and sample rate
+        """
+        # Get audio info
+        info = sf.info(file_path)
+        
+        # Load with original sample rate
+        y, sr = sf.read(file_path)
+        
+        # Convert to mono if necessary for analysis
+        if y.ndim > 1 and y.shape[1] > 1:
+            y_mono = np.mean(y, axis=1)
+        else:
+            y_mono = y
+            
+        return y_mono, sr
                 
     def visualize_transients(self, file_path: str, output_file: Optional[str] = None):
         """
@@ -194,3 +268,86 @@ class AudioTransientSplitter:
             plt.savefig(output_file)
         else:
             plt.show()
+    
+    def split_in_original_format(self, 
+                               file_path: str, 
+                               output_dir: str, 
+                               min_duration_sec: float = 0.1,
+                               offset_ms: int = 0) -> List[str]:
+        """
+        Split audio preserving all original audio properties including channels and format.
+        
+        Args:
+            file_path: Path to the audio file
+            output_dir: Directory to save the split files
+            min_duration_sec: Minimum duration in seconds for a segment to be saved
+            offset_ms: Offset in milliseconds to start each segment before the detected transient
+            
+        Returns:
+            List of paths to the created audio segments
+        """
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Load audio and get info
+        info = sf.info(file_path)
+        is_multichannel = info.channels > 1
+        
+        # Load mono version for analysis
+        y_mono, sr = self.load_audio(file_path)
+        
+        # Detect transients
+        onsets = self.detect_transients(y_mono)
+        
+        # If no transients found, return empty list
+        if len(onsets) == 0:
+            return []
+        
+        # Add start and end points
+        all_splits = np.concatenate([[0], onsets, [len(y_mono)]])
+        
+        # Apply offset in samples
+        offset_samples = int((offset_ms / 1000) * sr)
+        
+        # Get file extension
+        file_ext = os.path.splitext(file_path)[1]
+        if not file_ext:
+            file_ext = ".wav"  # Default to wav if no extension
+        
+        # Load original audio with all channels
+        if is_multichannel:
+            y_full, _ = sf.read(file_path)
+        else:
+            y_full = y_mono
+        
+        # Split and save audio segments
+        output_files = []
+        filename = os.path.splitext(os.path.basename(file_path))[0]
+        
+        for i in range(len(all_splits) - 1):
+            start = max(0, all_splits[i] - offset_samples)
+            end = all_splits[i + 1]
+            
+            # Check if segment meets minimum duration
+            duration = (end - start) / sr
+            if duration < min_duration_sec:
+                continue
+                
+            # Extract segment with all original channels
+            segment = y_full[start:end]
+            
+            # Create output file path
+            output_file = os.path.join(output_dir, f"{filename}_segment_{i:03d}{file_ext}")
+            
+            # Save segment with all original properties
+            sf.write(
+                output_file, 
+                segment, 
+                info.samplerate,
+                subtype=info.subtype,
+                format=info.format,
+                endian=info.endian
+            )
+            output_files.append(output_file)
+            
+        return output_files
