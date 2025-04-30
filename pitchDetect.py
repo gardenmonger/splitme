@@ -67,8 +67,8 @@ class AudioPitchDetector:
                 - cents_deviation: How many cents sharp/flat the frequency is from the exact note
         """
         # A4 = 440 Hz is our reference
-        # A4 = 440.0
-        A4 = 442.0
+        A4 = 440.0
+        # A4 = 442.0
         
         # Notes in an octave
         notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']

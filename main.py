@@ -10,26 +10,38 @@ def main():
     audio = file.get_file_path()
     output = folder.get_folder_path()
     sound = AudioPitchDetector(audio)
-    splitter = AudioTransientSplitter()
+    splitter = AudioTransientSplitter(
+        delta=0.05,           # Lower threshold for more sensitive detection
+        wait=45,              # Wait time between onsets
+    
+        # End detection (release) parameters
+        release_threshold=0.01,  # Release threshold (40% of peak)
+        release_time=1000         # Minimum segment duration (30ms)
+    )
     
     # Visualize the transients
-    splitter.visualize_transients(audio)
+    splitter.visualize_transient_segments(audio)
 
-    output_files = splitter.split_in_original_format(
+    output_files = splitter.split_audio_by_segments(
         audio,
         output,
         min_duration_sec=0.1,
-        offset_ms=20) # Adjust detection parameters for different audio characteristics
+        pre_offset_ms=20        # 12ms pre-roll
+        # offset_ms=10 # Adjust detection parameters for different audio characteristics
+    ) 
 
     splitter.adjust_parameters(
-        delta=0.05,            # Lower threshold for more sensitive detection
-        wait=15                # Shorter wait period between transients
-        )
-
+        # For onset (start) detection:
+        delta=1.5,              # More sensitive onset detection
+        wait=80,                 # Allow closer transients
+        
+        # For release (end) detection:
+        release_threshold=0.05,  # Lower threshold = longer decay tails
+        release_time=70          # Longer minimum segment length (40ms)
+    )
 
 
     rename.process_wav_files(output)
-
 
 if __name__ == '__main__':
     main()
