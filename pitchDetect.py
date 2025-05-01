@@ -1,39 +1,95 @@
 import os
 import numpy as np
-import wave
 import glob
-from scipy.fft import fft
 import scipy.io.wavfile as wavfile
+from scipy.fft import fft
 
 class AudioPitchDetector:
     def __init__(self):
-        # Dictionary mapping frequencies to musical notes
-        # Frequencies based on A4 = 440Hz
-        self.notes = {
-            16.35: "C0",
-            17.32: "C#0",
-            18.35: "D0",
-            19.45: "D#0",
-            20.60: "E0",
-            21.83: "F0",
-            23.12: "F#0",
-            24.50: "G0",
-            25.96: "G#0",
-            27.50: "A0",
-            29.14: "A#0",
-            30.87: "B0"
-        }
+        # Define note frequencies (A4 = 440Hz standard)
+        self.A4_freq = 440.0
+        # Create a comprehensive dictionary of frequencies to notes
+        self.build_note_frequencies()
         
-        # Populate all octaves
-        for i in range(1, 9):
-            for base_freq, note in list(self.notes.items()):
-                if note.endswith(str(i-1)):
-                    new_note = note[:-1] + str(i)
-                    self.notes[base_freq * (2**i)] = new_note
+    def build_note_frequencies(self):
+        """Build a complete dictionary of note frequencies across all octaves"""
+        # Notes in an octave
+        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        
+        # Frequency of A4 is 440Hz
+        # We'll calculate frequencies for other notes based on this
+        self.note_frequencies = {}
+        
+        # Calculate for multiple octaves (0-8)
+        for octave in range(9):
+            for semitone, note in enumerate(notes):
+                # Calculate the number of semitones from A4
+                # A4 is at octave 4, position 9 (0-indexed)
+                n = semitone - 9 + (octave - 4) * 12
+                # Calculate frequency using the equal temperament formula
+                freq = self.A4_freq * (2 ** (n / 12))
+                
+                note_name = f"{note}{octave}"
+                self.note_frequencies[note_name] = freq
+    
+    def get_dominant_frequency(self, audio_data, sample_rate):
+        """
+        Perform FFT to find the dominant frequency in the audio
+        """
+        # Apply window function to reduce spectral leakage
+        window = np.hamming(len(audio_data))
+        windowed_data = audio_data * window
+        
+        # Perform FFT
+        fft_result = fft(windowed_data)
+        magnitude = np.abs(fft_result[:len(fft_result)//2])  # Use only first half (positive frequencies)
+        
+        # Create frequency bins
+        freq_bins = np.fft.fftfreq(len(audio_data), 1/sample_rate)[:len(audio_data)//2]
+        
+        # Filter out very low frequencies (below 20Hz) which are often noise
+        valid_indices = freq_bins > 20
+        filtered_magnitude = magnitude[valid_indices]
+        filtered_freq_bins = freq_bins[valid_indices]
+        
+        if len(filtered_magnitude) == 0:
+            return 0
+            
+        # Find the frequency with the highest magnitude
+        max_index = np.argmax(filtered_magnitude)
+        dominant_freq = filtered_freq_bins[max_index]
+        
+        return dominant_freq
+    
+    def frequency_to_note(self, frequency):
+        """
+        Convert a frequency to the corresponding musical note
+        """
+        if frequency <= 0:
+            return "Unknown"
+            
+        # Calculate the number of semitones from A4 (440Hz)
+        semitones_from_A4 = 12 * np.log2(frequency / self.A4_freq)
+        # Round to the nearest semitone
+        semitones_rounded = round(semitones_from_A4)
+        
+        # Convert semitone distance to note and octave
+        note_index = (semitones_rounded + 9) % 12  # A is at index 9
+        octave = 4 + (semitones_rounded + 9) // 12  # A4 is in octave 4
+        
+        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        note = notes[note_index]
+        
+        # Check if octave is in valid range
+        if 0 <= octave <= 8:
+            return f"{note}{octave}"
+        else:
+            # Outside piano range, but still return a note name
+            return f"{note}{octave}"
     
     def analyze_wav(self, file_path):
         """
-        Analyze a single WAV file and return the dominant musical note
+        Analyze a WAV file to find its dominant musical note
         """
         try:
             # Read WAV file
@@ -42,65 +98,26 @@ class AudioPitchDetector:
             # Convert to mono if stereo
             if len(data.shape) > 1:
                 data = data.mean(axis=1)
+                
+            # Normalize data
+            data = data / np.max(np.abs(data))
             
-            # Apply window function to reduce spectral leakage
-            window = np.hamming(len(data))
-            data = data * window
+            # Get dominant frequency
+            dominant_freq = self.get_dominant_frequency(data, sample_rate)
             
-            # Perform FFT and get magnitude spectrum
-            fft_result = fft(data)
-            magnitude = np.abs(fft_result)
+            # Convert frequency to note
+            note = self.frequency_to_note(dominant_freq)
             
-            # Get frequency bins
-            freq_bins = np.fft.fftfreq(len(magnitude), 1/sample_rate)
-            
-            # Consider only positive frequencies
-            positive_freq_indices = np.where(freq_bins > 0)
-            magnitude = magnitude[positive_freq_indices]
-            freq_bins = freq_bins[positive_freq_indices]
-            
-            # Find the frequency with the highest magnitude
-            peak_index = np.argmax(magnitude)
-            dominant_frequency = freq_bins[peak_index]
-            
-            # Find the closest musical note
-            closest_note = self.find_closest_note(dominant_frequency)
-            
-            return closest_note
+            print(f"File: {file_path}, Dominant Frequency: {dominant_freq:.2f}Hz, Note: {note}")
+            return note
             
         except Exception as e:
             print(f"Error analyzing {file_path}: {str(e)}")
             return None
     
-    def find_closest_note(self, frequency):
-        """
-        Find the closest musical note to the given frequency
-        """
-        # Convert all notes to a list for easier processing
-        notes_list = list(self.notes.items())
-        notes_list.sort()  # Sort by frequency
-        
-        # Handle frequencies beyond our range
-        if frequency < notes_list[0][0]:
-            return notes_list[0][1]  # Return the lowest note
-        if frequency > notes_list[-1][0]:
-            return notes_list[-1][1]  # Return the highest note
-        
-        # Find the two closest notes
-        for i in range(len(notes_list) - 1):
-            if notes_list[i][0] <= frequency < notes_list[i+1][0]:
-                # Choose the closer note
-                if abs(frequency - notes_list[i][0]) < abs(frequency - notes_list[i+1][0]):
-                    return notes_list[i][1]
-                else:
-                    return notes_list[i+1][1]
-                
-        # Fallback
-        return "Unknown"
-    
     def process_wav_files(self, folder_path):
         """
-        Process all WAV files in the given folder and rename them with their musical notes
+        Process all WAV files in the given folder and rename them with their dominant musical notes
         """
         # Get all WAV files in the folder
         wav_files = glob.glob(os.path.join(folder_path, "*.wav"))
