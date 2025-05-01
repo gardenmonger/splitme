@@ -1,157 +1,133 @@
-#!/usr/bin/env python
-
-import librosa
 import os
 import numpy as np
-import math
+import wave
+import glob
+from scipy.fft import fft
+import scipy.io.wavfile as wavfile
 
 class AudioPitchDetector:
-    def __init__(self, audio_path):
-        self.audio_path = audio_path
-        self.audio, self.sr = librosa.load(audio_path, sr=None)  # Load audio with its original sample rate
-
-    def audio_sampleRate(self):
-        sr = self.sr
-        return sr
-
-    def detect_pitch(self):
+    def __init__(self):
+        # Dictionary mapping frequencies to musical notes
+        # Frequencies based on A4 = 440Hz
+        self.notes = {
+            16.35: "C0",
+            17.32: "C#0",
+            18.35: "D0",
+            19.45: "D#0",
+            20.60: "E0",
+            21.83: "F0",
+            23.12: "F#0",
+            24.50: "G0",
+            25.96: "G#0",
+            27.50: "A0",
+            29.14: "A#0",
+            30.87: "B0"
+        }
+        
+        # Populate all octaves
+        for i in range(1, 9):
+            for base_freq, note in list(self.notes.items()):
+                if note.endswith(str(i-1)):
+                    new_note = note[:-1] + str(i)
+                    self.notes[base_freq * (2**i)] = new_note
+    
+    def analyze_wav(self, file_path):
         """
-        Detect the pitch of the audio and return it as a musical note.
+        Analyze a single WAV file and return the dominant musical note
         """
-        # Perform pitch detection using librosa's pyin algorithm
-        # This will give us an estimate of the pitch in Hz
-        pitches, magnitudes = librosa.core.piptrack(y=self.audio, sr=self.sr)
-
-        # Handle the case where magnitudes are empty or there's an issue with pitch detection
-        if pitches.size == 0 or magnitudes.size == 0:
-            print("Error: Pitch or magnitude data is empty.")
+        try:
+            # Read WAV file
+            sample_rate, data = wavfile.read(file_path)
+            
+            # Convert to mono if stereo
+            if len(data.shape) > 1:
+                data = data.mean(axis=1)
+            
+            # Apply window function to reduce spectral leakage
+            window = np.hamming(len(data))
+            data = data * window
+            
+            # Perform FFT and get magnitude spectrum
+            fft_result = fft(data)
+            magnitude = np.abs(fft_result)
+            
+            # Get frequency bins
+            freq_bins = np.fft.fftfreq(len(magnitude), 1/sample_rate)
+            
+            # Consider only positive frequencies
+            positive_freq_indices = np.where(freq_bins > 0)
+            magnitude = magnitude[positive_freq_indices]
+            freq_bins = freq_bins[positive_freq_indices]
+            
+            # Find the frequency with the highest magnitude
+            peak_index = np.argmax(magnitude)
+            dominant_frequency = freq_bins[peak_index]
+            
+            # Find the closest musical note
+            closest_note = self.find_closest_note(dominant_frequency)
+            
+            return closest_note
+            
+        except Exception as e:
+            print(f"Error analyzing {file_path}: {str(e)}")
             return None
-
-        # Get the index of the peak in the pitch array (we need to ensure we don't go out of bounds)
-        # We can limit the index search to the last valid index to prevent out-of-bounds errors
-        index_of_peak = magnitudes[:, :].argmax(axis=0)
-
-        # Handle cases where magnitudes might not have a clear peak
-        # We limit the index_of_peak to avoid IndexErrors at the edges
-        pitch_hz = None
-        for i in range(len(index_of_peak)):
+    
+    def find_closest_note(self, frequency):
+        """
+        Find the closest musical note to the given frequency
+        """
+        # Convert all notes to a list for easier processing
+        notes_list = list(self.notes.items())
+        notes_list.sort()  # Sort by frequency
+        
+        # Handle frequencies beyond our range
+        if frequency < notes_list[0][0]:
+            return notes_list[0][1]  # Return the lowest note
+        if frequency > notes_list[-1][0]:
+            return notes_list[-1][1]  # Return the highest note
+        
+        # Find the two closest notes
+        for i in range(len(notes_list) - 1):
+            if notes_list[i][0] <= frequency < notes_list[i+1][0]:
+                # Choose the closer note
+                if abs(frequency - notes_list[i][0]) < abs(frequency - notes_list[i+1][0]):
+                    return notes_list[i][1]
+                else:
+                    return notes_list[i+1][1]
+                
+        # Fallback
+        return "Unknown"
+    
+    def process_wav_files(self, folder_path):
+        """
+        Process all WAV files in the given folder and rename them with their musical notes
+        """
+        # Get all WAV files in the folder
+        wav_files = glob.glob(os.path.join(folder_path, "*.wav"))
+        
+        if not wav_files:
+            print(f"No WAV files found in {folder_path}")
+            return
+        
+        print(f"Found {len(wav_files)} WAV files to process")
+        
+        for wav_file in wav_files:
             try:
-                pitch_hz = pitches[index_of_peak[i], i]
-            except IndexError:
-                # Handle index out of bounds by skipping problematic points
-                continue
-            
-            # If a valid pitch is found, stop the loop
-            if pitch_hz is not None:
-                break
+                # Get the dominant note
+                note = self.analyze_wav(wav_file)
+                
+                if note:
+                    # Create new filename with the note
+                    base_path = os.path.dirname(wav_file)
+                    original_filename = os.path.basename(wav_file)
+                    filename_without_ext = os.path.splitext(original_filename)[0]
+                    new_filename = f"{filename_without_ext}_{note}.wav"
+                    new_path = os.path.join(base_path, new_filename)
+                    
+                    # Rename the file
+                    os.rename(wav_file, new_path)
+                    print(f"Renamed {original_filename} to {new_filename} (Note: {note})")
+                
+            except Exception as e:
+                print(f"Error processing {wav_file}: {str(e)}")
 
-        if pitch_hz is None:
-            print("Error: No valid pitch found.")
-            return None
-        
-        # Convert Hz to musical note
-        note = self.hz_to_note(pitch_hz)
-        return note
-
-    def hz_to_note(self, frequency):
-        """
-        Convert a frequency in Hz to the closest musical note.
-        
-        Args:
-            frequency (float): The frequency in Hz to convert
-            
-        Returns:
-            tuple: (note_name, octave, cents_deviation)
-                - note_name: The name of the note (C, C#, D, etc.)
-                - octave: The octave number
-                - cents_deviation: How many cents sharp/flat the frequency is from the exact note
-        """
-        # A4 = 440 Hz is our reference
-        A4 = 440.0
-        # A4 = 442.0
-        
-        # Notes in an octave
-        notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        
-        # Check for extremely low frequencies
-        if frequency <= 0:
-            return None, None, None
-        
-        # Calculate the number of half steps away from A4
-        # 12 * log2(f/440) gives the number of half steps
-        half_steps = 12 * math.log2(frequency / A4)
-        
-        # Round to the closest whole number to get the closest note
-        closest_half_step = round(half_steps)
-        
-        # Calculate how many cents we are off from the exact note
-        # 100 cents in a half step, positive means sharp, negative means flat
-        cents_deviation = 100 * (half_steps - closest_half_step)
-        
-        # A4 is note 'A' at octave 4, which is the 9th position (index 9) from C0
-        # So A4 is at position 9 + 4*12 = 57 half steps from C0
-        # C0 is the reference point (considered to be the lowest note)
-        
-        # Calculate the absolute position from C0
-        absolute_position = 57 + closest_half_step  # 57 is the position of A4
-        
-        # Determine the octave
-        octave = (absolute_position // 12) - 1  # Integer division
-        
-        # Determine the note name (index in the notes list)
-        note_index = absolute_position % 12
-        note_index = (note_index + 3) % 12  # Adjust because our array starts with C but we calculated from A
-        
-        # Get the note name
-        note_name = notes[note_index]
-        
-        print(f"octave: {octave}{cents_deviation}")
-
-        fnote = f"{note_name}_{octave}"
-        print(fnote)
-
-        return fnote
-
-    def rename_file_with_note(self):
-        """
-        Rename the audio file by appending the detected note to the original file name.
-        """
-        # Detect the pitch
-        note = self.detect_pitch()
-        
-        # If no note could be detected, do not rename the file
-        if note is None:
-            print("Error: Could not detect pitch, file will not be renamed.")
-            return None
-
-        # Get the file name and extension
-        base_name, ext = os.path.splitext(os.path.basename(self.audio_path))
-
-        # Create the new file name
-        new_name = f"{base_name}_{note}{ext}"
-
-        # Get the directory where the file is located
-        directory = os.path.dirname(self.audio_path)
-
-        # Construct the full path to rename the file
-        new_path = os.path.join(directory, new_name)
-
-        # Rename the file
-        os.rename(self.audio_path, new_path)
-
-        print(f"File renamed to: {new_path}")
-        return new_path
-
-# Example usage
-#audio_path = 'piano.wav'  # Replace with your audio file path
-#pitch_detector = AudioPitchDetector(audio_path)
-#pitch_detector.rename_file_with_note()
-
-
-#1 grabs the audio file
-
-
-#2 detects the pitch of audio and returns pitch value as a note like "A,G,C,F" in string format
-
-
-#3 renames the file with its original name but append the note to the name of audio file, example "piano.wav" becomes "piano_A_.wav"
