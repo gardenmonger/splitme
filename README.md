@@ -24,5 +24,5 @@
 
 #[] preview the audio wave form ![screenshot](assets/audioWaveForm.png)
 
-
+adjust parameters for different samples
 
