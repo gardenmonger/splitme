@@ -10,6 +10,10 @@
 
 #[] from terminal cd into dir 
 
+#[] run `pip install librosa`
+
+#[] run `pip install -r requirements`
+
 #[] double check to see that `requirement.txt` is installed 
 
 #[] run `python main.py`
