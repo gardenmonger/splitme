@@ -12,7 +12,7 @@
 
 #[] run `pip install librosa`
 
-#[] run `pip install -r requirements`
+#[] run `pip install -r requirements.txt`
 
 #[] double check to see that `requirement.txt` is installed 
 
