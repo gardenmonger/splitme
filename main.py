@@ -10,26 +10,43 @@ def main():
     output = folder.get_folder_path()
     splitter = AudioTransientSplitter(
         delta=0.05,           # Lower threshold for more sensitive detection
-        wait=45,              # Wait time between onsets
-    
+        wait=30,              # Wait time between onsets
+        tail_threshold=0.2,    #Tail sensitivity  
+        tail_time_ms=500,        #maximum tail time
+        preserve_tail=True,       #Enable Tail Preservation
+
         # End detection (release) parameters
         release_threshold=0.01,  # Release threshold (40% of peak)
-        release_time=1000         # Minimum segment duration (30ms)
+        release_time=1500         # Minimum segment duration (30ms)
     )
     
     # Visualize the transients
     splitter.visualize_transient_segments(audio)
 
-    splitter.adjust_parameters(
-        # For onset (start) detection:
-        delta=0.08,              # More sensitive onset detection
-        release_threshold=0.2,  # Lower threshold = longer decay tails
-        # release_time=50,          # Slightly longer minimum duration
-        wait=30,                 # Allow closer transients
+    # edited_segments = splitter.interactive_segment_editor(
+    #     audio,
+    #     pre_offset_ms=10
+    # )
+
+    # splitter.adjust_parameters(
+    #     # For onset (start) detection:
+    #     delta=0.08,              # More sensitive onset detection
+    #     release_threshold=0.2,  # Lower threshold = longer decay tails
+    #     # release_time=50,          # Slightly longer minimum duration
+    #     wait=30,                 # Allow closer transients
         
-        # For release (end) detection:
-        release_time=1500          # Longer minimum segment length (40ms)
-    )
+    #     # For release (end) detection:
+    #     release_time=1500          # Longer minimum segment length (40ms)
+    # )
+
+    # After manually editing, split the audio with your customized boundaries
+    # if edited_segments:
+    #     output_files = splitter.split_with_edited_segments(
+    #         audio,
+    #         output,
+    #         edited_segments,
+    #         pre_offset_ms=10
+    #     )
 
     #  # Visualize the transients re-adjusted
     # splitter.visualize_transient_segments(audio)
