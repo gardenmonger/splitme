@@ -28,4 +28,4 @@ adjust parameters for different samples
 
 
 <h1>💖 Support the project</h1>
-[![paypal.me/gardenmonger](https://ionicabizau.github.io/badges/paypal.svg)](https://www.paypal.com/donate/?hosted_button_id=ETG3Z3UZS99K4)
+(https://www.paypal.com/donate/?hosted_button_id=ETG3Z3UZS99K4)
